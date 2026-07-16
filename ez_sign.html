@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EZ Sign 画像生成</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.app{max-width:1060px;width:100%;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);overflow:hidden}
+.app-header{padding:20px 28px;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;justify-content:space-between}
+.app-header h1{font-size:20px;font-weight:700}
+.app-header span{font-size:13px;color:#888}
+.app-body{display:flex;min-height:560px}
+.panel-left{width:340px;flex-shrink:0;border-right:1px solid #e8e8e8;display:flex;flex-direction:column}
+.panel-right{flex:1;display:flex;align-items:center;justify-content:center;padding:28px;background:#fafafa}
+.tabs{display:flex;border-bottom:1px solid #e8e8e8;overflow-x:auto}
+.tab{padding:12px 16px;font-size:13px;border:none;background:none;cursor:pointer;white-space:nowrap;color:#666;border-bottom:2px solid transparent;transition:all 0.15s}
+.tab:hover{color:#333;background:#f5f5f5}
+.tab.active{color:#1a1a1a;border-bottom-color:#2563eb;font-weight:600}
+.params{padding:16px 20px;overflow-y:auto;flex:1}
+.param-group{margin-bottom:16px}
+.param-group label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px}
+.param-group input[type="text"],.param-group input[type="number"],.param-group textarea,.param-group select{width:100%;padding:8px 10px;font-size:13px;border:1px solid #d0d0d0;border-radius:6px;outline:none;transition:border 0.15s}
+.param-group input[type="text"]:focus,.param-group input[type="number"]:focus,.param-group textarea:focus,.param-group select:focus{border-color:#2563eb}
+.param-group textarea{resize:vertical;min-height:80px;font-family:inherit}
+.param-group input[type="number"]{width:80px}
+.param-group input[type="checkbox"]{margin-right:6px}
+.palette-row{display:flex;gap:6px;flex-wrap:wrap}
+.palette-swatch{width:32px;height:32px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:all 0.12s;position:relative}
+.palette-swatch:hover{transform:scale(1.12)}
+.palette-swatch.active{border-color:#2563eb;box-shadow:0 0 0 2px #fff,0 0 0 4px #2563eb}
+.palette-swatch .label{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:9px;color:#888;white-space:nowrap}
+.canvas-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+canvas#preview{width:600px;height:450px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:#fff;image-rendering:pixelated}
+.btn-download{padding:12px 32px;font-size:15px;font-weight:600;border:none;border-radius:8px;cursor:pointer;background:#2563eb;color:#fff;transition:background 0.15s;display:flex;align-items:center;gap:8px}
+.btn-download:hover{background:#1d4ed8}
+.btn-download:disabled{background:#94a3b8;cursor:not-allowed}
+.btn-download .icon{font-size:18px}
+.hint{font-size:11px;color:#999;margin-top:8px;text-align:center}
+.footer{padding:12px 28px;border-top:1px solid #e8e8e8;font-size:12px;color:#aaa;display:flex;justify-content:space-between}
+@media(max-width:800px){.app-body{flex-direction:column}.panel-left{width:100%;border-right:none;border-bottom:1px solid #e8e8e8}.panel-right{padding:16px}canvas#preview{width:100%;height:auto;aspect-ratio:4/3}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="app-header">
+    <h1>EZ Sign 画像生成</h1>
+    <span>400×300 &nbsp; 4色 (白・黒・赤・黄)</span>
+  </div>
+  <div class="app-body">
+    <div class="panel-left">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-template="calendar">カレンダー</button>
+        <button class="tab" data-template="multitext">複数行テキスト</button>
+        <button class="tab" data-template="nameplate">名札</button>
+        <button class="tab" data-template="schedule">スケジュール</button>
+        <button class="tab" data-template="simple">シンプル</button>
+      </div>
+      <div class="params" id="params"></div>
+    </div>
+    <div class="panel-right">
+      <div class="canvas-wrap">
+        <canvas id="preview" width="400" height="300"></canvas>
+        <button class="btn-download" id="btnDownload">
+          <span class="icon">📥</span> インデックスPNGをダウンロード
+        </button>
+        <div class="hint">EZ Sign 公式アプリで画像を読み込んでNFC書き換え</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span>EZ Sign NFC 4.2インチ 対応</span>
+    <span>インデックスPNG (4色パレット)</span>
+  </div>
+</div>
+<script>
+// =====  Palette  =====
+const PALETTE = [
+  { name: '白', r: 255, g: 255, b: 255 },
+  { name: '黒', r:   0, g:   0, b:   0 },
+  { name: '赤', r: 255, g:   0, b:   0 },
+  { name: '黄', r: 255, g: 255, b:   0 },
+];
+
+function cssColor(idx) { const c = PALETTE[idx]; return `rgb(${c.r},${c.g},${c.b})`; }
+
+// =====  Template Definitions  =====
+const TEMPLATE_DEFS = {
+  calendar: {
+    label: 'カレンダー',
+    params: [
+      { key: 'year',   label: '年', type: 'number', def: new Date().getFullYear(), min: 2020, max: 2099 },
+      { key: 'month',  label: '月', type: 'number', def: new Date().getMonth() + 1, min: 1, max: 12 },
+      { key: 'title',  label: 'タイトル', type: 'text', def: '' },
+      { key: 'titleColor', label: 'タイトルの色', type: 'palette', def: 1 },
+      { key: 'sunColor',   label: '日曜の色', type: 'palette', def: 2 },
+      { key: 'satColor',   label: '土曜の色', type: 'palette', def: 3 },
+      { key: 'frameColor', label: '枠の色', type: 'palette', def: 1 },
+      { key: 'weekStartsMonday', label: '月曜始まり', type: 'checkbox', def: true },
+    ]
+  },
+  multitext: {
+    label: '複数行テキスト',
+    params: [
+      { key: 'title',     label: 'タイトル', type: 'text', def: 'お知らせ' },
+      { key: 'titleColor',label: 'タイトルの色', type: 'palette', def: 2 },
+      { key: 'lineCount', label: '行数', type: 'number', def: 3, min: 1, max: 10 },
+      { key: 'bodyColor', label: '本文の色', type: 'palette', def: 1 },
+      { key: 'align',     label: '配置', type: 'select', def: 'center', options: [['left','左'],['center','中央'],['right','右']] },
+      { key: 'bgColor',   label: '背景色', type: 'palette', def: 0 },
+    ],
+    lineDefaults: ['会議は15時から', '302号室', '資料をお持ちください', '', '', '', '', '', '', ''],
+  },
+  nameplate: {
+    label: '名札',
+    params: [
+      { key: 'name',      label: '名前', type: 'text', def: '山田 太郎' },
+      { key: 'nameColor', label: '名前の色', type: 'palette', def: 1 },
+      { key: 'role',      label: '役職', type: 'text', def: 'マネージャー' },
+      { key: 'roleColor', label: '役職の色', type: 'palette', def: 2 },
+      { key: 'company',   label: '会社名', type: 'text', def: '株式会社サンプル' },
+      { key: 'companyColor', label: '会社名の色', type: 'palette', def: 1 },
+      { key: 'borderColor',  label: '枠の色', type: 'palette', def: 1 },
+      { key: 'bgColor',   label: '背景色', type: 'palette', def: 0 },
+    ]
+  },
+  schedule: {
+    label: 'スケジュール',
+    params: [
+      { key: 'event',     label: 'イベント名', type: 'text', def: 'プロジェクト定例会' },
+      { key: 'eventColor',label: 'イベント名の色', type: 'palette', def: 2 },
+      { key: 'date',      label: '日付', type: 'text', def: '2026/7/20' },
+      { key: 'time',      label: '時間', type: 'text', def: '15:00 〜 16:30' },
+      { key: 'location',  label: '場所', type: 'text', def: '3F 大会議室' },
+      { key: 'detailColor', label: '詳細の色', type: 'palette', def: 1 },
+      { key: 'borderColor',  label: '枠の色', type: 'palette', def: 1 },
+      { key: 'bgColor',   label: '背景色', type: 'palette', def: 0 },
+    ]
+  },
+  simple: {
+    label: 'シンプル',
+    params: [
+      { key: 'main',      label: '大見出し', type: 'text', def: '会議中' },
+      { key: 'mainColor', label: '大見出しの色', type: 'palette', def: 2 },
+      { key: 'sub',       label: '小見出し', type: 'text', def: '14:00〜15:30' },
+      { key: 'subColor',  label: '小見出しの色', type: 'palette', def: 1 },
+      { key: 'bgColor',   label: '背景色', type: 'palette', def: 0 },
+      { key: 'borderColor', label: '枠の色', type: 'palette', def: 1 },
+    ]
+  }
+};
+
+// =====  State  =====
+let currentTemplate = 'calendar';
+let paramValues = {};
+const canvas = document.getElementById('preview');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// =====  Param UI Builder  =====
+function buildLineInputs(container, vals, def) {
+  const count = vals.lineCount || def.params.find(p => p.key === 'lineCount').def;
+  const existing = container.querySelector('.line-inputs-wrap');
+  if (existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'line-inputs-wrap';
+  const label = document.createElement('label');
+  label.textContent = '各行のテキスト';
+  label.style.cssText = 'display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px';
+  wrap.appendChild(label);
+  const defaults = def.lineDefaults || [];
+  for (let i = 0; i < count; i++) {
+    const key = 'line' + (i + 1);
+    const g = document.createElement('div');
+    g.style.cssText = 'margin-bottom:4px;display:flex;align-items:center;gap:6px';
+    const num = document.createElement('span');
+    num.textContent = String(i + 1);
+    num.style.cssText = 'font-size:11px;color:#999;width:16px;text-align:right;flex-shrink:0';
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = '';
+    const initVal = vals[key] !== undefined ? vals[key] : (defaults[i] || '');
+    vals[key] = initVal;
+    inp.value = initVal;
+    inp.style.cssText = 'flex:1;padding:6px 8px;font-size:13px;border:1px solid #d0d0d0;border-radius:4px;outline:none';
+    inp.oninput = () => { vals[key] = inp.value; updatePreview(); };
+    g.appendChild(num);
+    g.appendChild(inp);
+    wrap.appendChild(g);
+  }
+  container.appendChild(wrap);
+}
+
+function buildParamUI() {
+  const container = document.getElementById('params');
+  const def = TEMPLATE_DEFS[currentTemplate];
+  const vals = paramValues[currentTemplate] || (paramValues[currentTemplate] = {});
+  container.innerHTML = '';
+  def.params.forEach(p => {
+    const g = document.createElement('div');
+    g.className = 'param-group';
+    const label = document.createElement('label');
+    label.textContent = p.label;
+    g.appendChild(label);
+    const val = vals[p.key] !== undefined ? vals[p.key] : p.def;
+    vals[p.key] = val;
+
+    if (p.type === 'palette') {
+      const row = document.createElement('div');
+      row.className = 'palette-row';
+      PALETTE.forEach((c, i) => {
+        const sw = document.createElement('div');
+        sw.className = 'palette-swatch' + (i === val ? ' active' : '');
+        sw.style.background = cssColor(i);
+        if (i === 0) sw.style.borderColor = '#ccc';
+        sw.dataset.idx = i;
+        sw.onclick = () => {
+          row.querySelectorAll('.palette-swatch').forEach(s => s.classList.remove('active'));
+          sw.classList.add('active');
+          vals[p.key] = i;
+          updatePreview();
+        };
+        row.appendChild(sw);
+      });
+      g.appendChild(row);
+    } else if (p.type === 'select') {
+      const sel = document.createElement('select');
+      p.options.forEach(([v, l]) => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = l; if (v === val) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.onchange = () => { vals[p.key] = sel.value; updatePreview(); };
+      g.appendChild(sel);
+    } else if (p.type === 'checkbox') {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = !!val;
+      cb.onchange = () => { vals[p.key] = cb.checked; updatePreview(); };
+      g.appendChild(cb);
+      const lbl2 = document.createElement('span');
+      lbl2.style.cssText = 'font-size:13px;cursor:pointer';
+      lbl2.textContent = p.label;
+      lbl2.onclick = () => { cb.checked = !cb.checked; cb.onchange(); };
+      g.appendChild(lbl2);
+    } else if (p.type === 'number') {
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.value = val;
+      if (p.min !== undefined) inp.min = p.min;
+      if (p.max !== undefined) inp.max = p.max;
+      const onChangeNum = () => {
+        const nv = parseInt(inp.value);
+        if (!isNaN(nv) && nv >= (p.min || 1) && nv <= (p.max || 999)) {
+          vals[p.key] = nv;
+          updatePreview();
+          if (currentTemplate === 'multitext' && p.key === 'lineCount') {
+            buildLineInputs(container, vals, def);
+          }
+        }
+      };
+      inp.oninput = onChangeNum;
+      g.appendChild(inp);
+    } else {
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = val;
+      inp.oninput = () => { vals[p.key] = inp.value; updatePreview(); };
+      g.appendChild(inp);
+    }
+    container.appendChild(g);
+  });
+  if (currentTemplate === 'multitext') {
+    buildLineInputs(container, vals, def);
+  }
+}
+
+// =====  Drawing Helpers  =====
+function fillBg(idx) { ctx.fillStyle = cssColor(idx); ctx.fillRect(0,0,400,300); }
+
+function drawBorder(idx, thick) {
+  ctx.strokeStyle = cssColor(idx);
+  ctx.lineWidth = thick || 3;
+  ctx.strokeRect(6,6,388,288);
+}
+
+function autoFitFont(ctx, text, maxW, maxH, startSize) {
+  let size = startSize || 40;
+  ctx.font = `bold ${size}px sans-serif`;
+  let m = ctx.measureText(text);
+  while ((m.width > maxW || size > maxH) && size > 6) {
+    size -= 1;
+    ctx.font = `bold ${size}px sans-serif`;
+    m = ctx.measureText(text);
+  }
+  return size;
+}
+
+function drawTextCenter(text, x, y, maxW, size, colorIdx) {
+  ctx.fillStyle = cssColor(colorIdx);
+  const s = autoFitFont(ctx, text, maxW, size, size);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  return s;
+}
+
+function drawTextLeft(text, x, y, maxW, size, colorIdx) {
+  ctx.fillStyle = cssColor(colorIdx);
+  const s = autoFitFont(ctx, text, maxW, size, size);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  return s;
+}
+
+function drawTextRight(text, x, y, maxW, size, colorIdx) {
+  ctx.fillStyle = cssColor(colorIdx);
+  const s = autoFitFont(ctx, text, maxW, size, size);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  return s;
+}
+
+// =====  Template Renderers  =====
+function renderCalendar(v) {
+  fillBg(0);
+  if (v.frameColor !== 0) drawBorder(v.frameColor, 3);
+
+  const year = v.year, month = v.month;
+  const titleText = v.title || `${year}年${month}月`;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const startMon = v.weekStartsMonday;
+  const offset = startMon ? (firstDay === 0 ? 6 : firstDay - 1) : firstDay;
+
+  // Title
+  ctx.fillStyle = cssColor(v.titleColor);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  drawTextCenter(titleText, 200, 20, 360, 28, v.titleColor);
+
+  // Day-of-week headers
+  const days = startMon ? ['月','火','水','木','金','土','日'] : ['日','月','火','水','木','金','土'];
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < 7; i++) {
+    const x = 18 + i * 54;
+    const isSun = startMon ? (i === 6) : (i === 0);
+    const isSat = startMon ? (i === 5) : (i === 6);
+    ctx.fillStyle = cssColor(isSun ? v.sunColor : isSat ? v.satColor : 1);
+    ctx.fillText(days[i], x, 43);
+  }
+
+  // Calendar grid
+  const cellW = 54, cellH = 44;
+  const startX = 18, startY = 56;
+
+  // Today highlight
+  const today = new Date();
+  const isTodayMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
+
+  for (let d = 0; d < daysInMonth; d++) {
+    const col = (offset + d) % 7;
+    const row = Math.floor((offset + d) / 7);
+    const x = startX + col * cellW;
+    const y = startY + row * cellH;
+    const dayNum = d + 1;
+
+    const isSun = startMon ? (col === 6) : (col === 0);
+    const isSat = startMon ? (col === 5) : (col === 6);
+    const colorIdx = isSun ? v.sunColor : isSat ? v.satColor : 1;
+
+    if (isTodayMonth && dayNum === today.getDate()) {
+      ctx.beginPath();
+      ctx.arc(x + cellW/2, y + cellH/2, 14, 0, Math.PI*2);
+      ctx.fillStyle = cssColor(v.frameColor);
+      ctx.fill();
+      ctx.fillStyle = cssColor(0);
+      ctx.font = 'bold 16px sans-serif';
+    } else {
+      ctx.fillStyle = cssColor(colorIdx);
+      ctx.font = 'bold 15px sans-serif';
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(dayNum), x + cellW/2, y + cellH/2);
+  }
+}
+
+function renderMultitext(v) {
+  fillBg(v.bgColor);
+
+  const titleSize = 24;
+  if (v.title) {
+    ctx.fillStyle = cssColor(v.titleColor);
+    ctx.font = `bold ${titleSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let ts = titleSize;
+    let m = ctx.measureText(v.title);
+    while (m.width > 360 && ts > 10) { ts--; ctx.font = `bold ${ts}px sans-serif`; m = ctx.measureText(v.title); }
+    ctx.fillText(v.title, 200, 28);
+  }
+
+  const count = v.lineCount || 1;
+  const lines = [];
+  for (let i = 0; i < count; i++) {
+    const txt = v['line' + (i + 1)];
+    if (txt && txt.trim()) lines.push(txt.trim());
+  }
+  if (!lines.length) return;
+
+  const startY = v.title ? 55 : 30;
+  const availH = 300 - startY - 10;
+  const lc = lines.length;
+  let bodySize = Math.min(Math.floor(availH / lc) - 2, 26);
+  if (bodySize < 8) bodySize = 8;
+
+  ctx.textBaseline = 'middle';
+  lines.forEach((line, i) => {
+    const y = startY + i * (availH / lc) + (availH / lc) / 2;
+    const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
+    fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor);
+  });
+}
+
+function renderNameplate(v) {
+  fillBg(v.bgColor);
+  if (v.borderColor !== v.bgColor) drawBorder(v.borderColor, 4);
+
+  const nameText = v.name || '名前';
+  const nameSize = drawTextCenter(nameText, 200, 110, 340, 52, v.nameColor);
+
+  let y = 175;
+  if (v.role) {
+    drawTextCenter(v.role, 200, y, 340, 24, v.roleColor);
+    y += 35;
+  }
+  if (v.company) {
+    drawTextCenter(v.company, 200, y, 340, 18, v.companyColor);
+  }
+}
+
+function renderSchedule(v) {
+  fillBg(v.bgColor);
+  if (v.borderColor !== v.bgColor) drawBorder(v.borderColor, 3);
+
+  const eventText = v.event || '(イベント名)';
+  drawTextCenter(eventText, 200, 48, 360, 32, v.eventColor);
+
+  const details = [];
+  if (v.date) details.push('日付: ' + v.date);
+  if (v.time) details.push('時間: ' + v.time);
+  if (v.location) details.push('場所: ' + v.location);
+
+  if (details.length) {
+    const startY = 120;
+    const gap = details.length > 2 ? 30 : 38;
+    details.forEach((d, i) => {
+      drawTextCenter(d, 200, startY + i * gap, 340, 18, v.detailColor);
+    });
+  }
+}
+
+function renderSimple(v) {
+  fillBg(v.bgColor);
+  if (v.borderColor !== v.bgColor) drawBorder(v.borderColor, 5);
+
+  const mainText = v.main || '(テキスト)';
+  drawTextCenter(mainText, 200, v.sub ? 100 : 150, 360, 64, v.mainColor);
+
+  if (v.sub) {
+    drawTextCenter(v.sub, 200, 190, 340, 28, v.subColor);
+  }
+}
+
+const RENDERERS = {
+  calendar:  renderCalendar,
+  multitext: renderMultitext,
+  nameplate: renderNameplate,
+  schedule:  renderSchedule,
+  simple:    renderSimple,
+};
+
+// =====  Preview  =====
+function updatePreview() {
+  const vals = paramValues[currentTemplate] || {};
+  const renderer = RENDERERS[currentTemplate];
+  if (renderer) renderer(vals);
+}
+
+// =====  Indexed PNG Export  =====
+function nearestPalette(r, g, b) {
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < PALETTE.length; i++) {
+    const dr = r - PALETTE[i].r, dg = g - PALETTE[i].g, db = b - PALETTE[i].b;
+    const dist = dr*dr + dg*dg + db*db;
+    if (dist < bestDist) { bestDist = dist; best = i; }
+  }
+  return best;
+}
+
+function crc32(data) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    c ^= data[i];
+    for (let j = 0; j < 8; j++) c = (c >>> 1) ^ (c & 1 ? 0xEDB88320 : 0);
+  }
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function u32BE(v) { return [v>>>24,(v>>16)&255,(v>>8)&255,v&255]; }
+function u32toBytes(v) { return new Uint8Array(u32BE(v)); }
+
+function pngChunk(type, data) {
+  const te = new TextEncoder();
+  const typeB = te.encode(type);
+  const len = data ? data.length : 0;
+  const crcInput = new Uint8Array(typeB.length + len);
+  crcInput.set(typeB, 0);
+  if (data) crcInput.set(data, typeB.length);
+  const crc = crc32(crcInput);
+  const lenB = u32toBytes(len);
+  const crcB = u32toBytes(crc);
+  const result = new Uint8Array(4 + typeB.length + len + 4);
+  result.set(lenB, 0);
+  result.set(typeB, 4);
+  if (data) result.set(data, 8);
+  result.set(crcB, 4 + typeB.length + len);
+  return result;
+}
+
+async function generateIndexedPNG() {
+  const W = 400, H = 300;
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+
+  const indices = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const pi = i * 4;
+    indices[i] = nearestPalette(d[pi], d[pi+1], d[pi+2]);
+  }
+
+  // PLTE
+  const plteData = new Uint8Array(PALETTE.length * 3);
+  for (let i = 0; i < PALETTE.length; i++) {
+    plteData[i*3] = PALETTE[i].r;
+    plteData[i*3+1] = PALETTE[i].g;
+    plteData[i*3+2] = PALETTE[i].b;
+  }
+
+  // Filtered scanlines (filter None per row)
+  const raw = new Uint8Array(H * (1 + W));
+  for (let y = 0; y < H; y++) {
+    raw[y * (1 + W)] = 0;
+    for (let x = 0; x < W; x++) {
+      raw[y * (1 + W) + 1 + x] = indices[y * W + x];
+    }
+  }
+
+  // Zlib compress
+  let compressed;
+  if (typeof CompressionStream !== 'undefined') {
+    const cs = new CompressionStream('deflate');
+    const writer = cs.writable.getWriter();
+    writer.write(raw);
+    writer.close();
+    const reader = cs.readable.getReader();
+    const parts = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+    }
+    const totalLen = parts.reduce((a, b) => a + b.length, 0);
+    compressed = new Uint8Array(totalLen);
+    let off = 0;
+    for (const p of parts) { compressed.set(p, off); off += p.length; }
+  } else {
+    // Fallback: multiple stored deflate blocks + zlib wrapper
+    const maxBlock = 65535;
+    const numBlocks = Math.ceil(raw.length / maxBlock);
+    const bufSize = 2 + numBlocks * 5 + raw.length + 4;
+    const buf = new Uint8Array(bufSize);
+    let off = 0;
+    buf[off++] = 0x78; buf[off++] = 0x01; // zlib header
+    for (let b = 0; b < numBlocks; b++) {
+      const isLast = b === numBlocks - 1;
+      const start = b * maxBlock;
+      const chunkLen = Math.min(maxBlock, raw.length - start);
+      buf[off++] = isLast ? 0x01 : 0x00; // BFINAL, BTYPE=00
+      buf[off++] = chunkLen & 255;
+      buf[off++] = (chunkLen >> 8) & 255;
+      buf[off++] = (~chunkLen) & 255;
+      buf[off++] = ((~chunkLen) >> 8) & 255;
+      buf.set(raw.subarray(start, start + chunkLen), off);
+      off += chunkLen;
+    }
+    let a1 = 1, a2 = 0;
+    for (let i = 0; i < raw.length; i++) {
+      a1 = (a1 + raw[i]) % 65521;
+      a2 = (a2 + a1) % 65521;
+    }
+    const adler = ((a2 << 16) | a1) >>> 0;
+    buf[off++] = (adler >> 24) & 255;
+    buf[off++] = (adler >> 16) & 255;
+    buf[off++] = (adler >> 8) & 255;
+    buf[off++] = adler & 255;
+    compressed = buf.slice(0, off);
+  }
+
+  // IHDR
+  const ihdr = new Uint8Array(13);
+  new DataView(ihdr.buffer).setUint32(0, W, false);
+  new DataView(ihdr.buffer).setUint32(4, H, false);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 3;  // color type: indexed
+  ihdr[10] = 0; // compression
+  ihdr[11] = 0; // filter
+  ihdr[12] = 0; // interlace
+
+  // Assemble PNG
+  const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const parts = [signature, pngChunk('IHDR', ihdr), pngChunk('PLTE', plteData), pngChunk('IDAT', compressed), pngChunk('IEND', null)];
+  const total = parts.reduce((a, b) => a + b.length, 0);
+  const result = new Uint8Array(total);
+  let off2 = 0;
+  for (const p of parts) { result.set(p, off2); off2 += p.length; }
+  return result;
+}
+
+// =====  Download  =====
+async function downloadPNG() {
+  const btn = document.getElementById('btnDownload');
+  btn.disabled = true;
+  btn.textContent = '生成中...';
+  try {
+    updatePreview();
+    const png = await generateIndexedPNG();
+    const blob = new Blob([png], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const t = new Date();
+    const ts = `${t.getFullYear()}${String(t.getMonth()+1).padStart(2,'0')}${String(t.getDate()).padStart(2,'0')}_${String(t.getHours()).padStart(2,'0')}${String(t.getMinutes()).padStart(2,'0')}`;
+    a.download = `ezsign_${currentTemplate}_${ts}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+    alert('PNG生成に失敗しました: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<span class="icon">📥</span> インデックスPNGをダウンロード';
+}
+
+// =====  Template Switch  =====
+function switchTemplate(name) {
+  currentTemplate = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.template === name));
+  if (!paramValues[name]) paramValues[name] = {};
+  buildParamUI();
+  updatePreview();
+}
+
+// =====  Init  =====
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTemplate(tab.dataset.template));
+  });
+  document.getElementById('btnDownload').addEventListener('click', downloadPNG);
+  buildParamUI();
+  updatePreview();
+});
+</script>
+</body>
+</html>
