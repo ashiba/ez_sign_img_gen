@@ -105,12 +105,11 @@ const TEMPLATE_DEFS = {
     params: [
       { key: 'title',     label: 'タイトル', type: 'text', def: 'お知らせ' },
       { key: 'titleColor',label: 'タイトルの色', type: 'palette', def: 2 },
-      { key: 'lineCount', label: '行数', type: 'number', def: 3, min: 1, max: 10 },
+      { key: 'lines',     label: '本文（各行は改行区切り、最大10行）', type: 'textarea', def: '会議は15時から\n302号室\n資料をお持ちください' },
       { key: 'bodyColor', label: '本文の色', type: 'palette', def: 1 },
       { key: 'align',     label: '配置', type: 'select', def: 'center', options: [['left','左'],['center','中央'],['right','右']] },
       { key: 'bgColor',   label: '背景色', type: 'palette', def: 0 },
-    ],
-    lineDefaults: ['会議は15時から', '302号室', '資料をお持ちください', '', '', '', '', '', '', ''],
+    ]
   },
   nameplate: {
     label: '名札',
@@ -159,39 +158,6 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 // =====  Param UI Builder  =====
-function buildLineInputs(container, vals, def) {
-  const count = vals.lineCount || def.params.find(p => p.key === 'lineCount').def;
-  const existing = container.querySelector('.line-inputs-wrap');
-  if (existing) existing.remove();
-  const wrap = document.createElement('div');
-  wrap.className = 'line-inputs-wrap';
-  const label = document.createElement('label');
-  label.textContent = '各行のテキスト';
-  label.style.cssText = 'display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px';
-  wrap.appendChild(label);
-  const defaults = def.lineDefaults || [];
-  for (let i = 0; i < count; i++) {
-    const key = 'line' + (i + 1);
-    const g = document.createElement('div');
-    g.style.cssText = 'margin-bottom:4px;display:flex;align-items:center;gap:6px';
-    const num = document.createElement('span');
-    num.textContent = String(i + 1);
-    num.style.cssText = 'font-size:11px;color:#999;width:16px;text-align:right;flex-shrink:0';
-    const inp = document.createElement('input');
-    inp.type = 'text';
-    inp.placeholder = '';
-    const initVal = vals[key] !== undefined ? vals[key] : (defaults[i] || '');
-    vals[key] = initVal;
-    inp.value = initVal;
-    inp.style.cssText = 'flex:1;padding:6px 8px;font-size:13px;border:1px solid #d0d0d0;border-radius:4px;outline:none';
-    inp.oninput = () => { vals[key] = inp.value; updatePreview(); };
-    g.appendChild(num);
-    g.appendChild(inp);
-    wrap.appendChild(g);
-  }
-  container.appendChild(wrap);
-}
-
 function buildParamUI() {
   const container = document.getElementById('params');
   const def = TEMPLATE_DEFS[currentTemplate];
@@ -243,22 +209,17 @@ function buildParamUI() {
       lbl2.textContent = p.label;
       lbl2.onclick = () => { cb.checked = !cb.checked; cb.onchange(); };
       g.appendChild(lbl2);
+    } else if (p.type === 'textarea') {
+      const ta = document.createElement('textarea');
+      ta.value = val; ta.rows = 4;
+      ta.oninput = () => { vals[p.key] = ta.value; updatePreview(); };
+      g.appendChild(ta);
     } else if (p.type === 'number') {
       const inp = document.createElement('input');
       inp.type = 'number'; inp.value = val;
       if (p.min !== undefined) inp.min = p.min;
       if (p.max !== undefined) inp.max = p.max;
-      const onChangeNum = () => {
-        const nv = parseInt(inp.value);
-        if (!isNaN(nv) && nv >= (p.min || 1) && nv <= (p.max || 999)) {
-          vals[p.key] = nv;
-          updatePreview();
-          if (currentTemplate === 'multitext' && p.key === 'lineCount') {
-            buildLineInputs(container, vals, def);
-          }
-        }
-      };
-      inp.oninput = onChangeNum;
+      inp.oninput = () => { vals[p.key] = parseInt(inp.value) || 0; updatePreview(); };
       g.appendChild(inp);
     } else {
       const inp = document.createElement('input');
@@ -268,9 +229,6 @@ function buildParamUI() {
     }
     container.appendChild(g);
   });
-  if (currentTemplate === 'multitext') {
-    buildLineInputs(container, vals, def);
-  }
 }
 
 // =====  Drawing Helpers  =====
@@ -404,12 +362,7 @@ function renderMultitext(v) {
     ctx.fillText(v.title, 200, 28);
   }
 
-  const count = v.lineCount || 1;
-  const lines = [];
-  for (let i = 0; i < count; i++) {
-    const txt = v['line' + (i + 1)];
-    if (txt && txt.trim()) lines.push(txt.trim());
-  }
+  const lines = (v.lines || '').split('\n').map(l => l.trim()).filter(l => l).slice(0, 10);
   if (!lines.length) return;
 
   const startY = v.title ? 55 : 30;
