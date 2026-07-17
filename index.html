@@ -210,14 +210,14 @@ function buildParamUI() {
       });
       g.appendChild(row);
     } else if (p.type === 'font') {
-      const sel = document.createElement('select');
+      const fontSel = document.createElement('select');
       FONTS.forEach((f, i) => {
         const opt = document.createElement('option');
         opt.value = i; opt.textContent = f.label; if (i === val) opt.selected = true;
-        sel.appendChild(opt);
+        fontSel.appendChild(opt);
       });
-      sel.onchange = () => { vals[p.key] = parseInt(sel.value); updatePreview(); };
-      g.appendChild(sel);
+      fontSel.onchange = () => { vals[p.key] = parseInt(fontSel.value); updatePreview(); };
+      g.appendChild(fontSel);
       const sel = document.createElement('select');
       p.options.forEach(([v, l]) => {
         const opt = document.createElement('option');
