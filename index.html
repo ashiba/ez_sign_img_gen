@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EZ Sign 画像生成</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Reggae+One&family=Train+One&family=Rampart+One&family=Yuji+Syuku&family=Zen+Maru+Gothic&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;color:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -85,6 +88,18 @@ const PALETTE = [
 
 function cssColor(idx) { const c = PALETTE[idx]; return `rgb(${c.r},${c.g},${c.b})`; }
 
+const FONTS = [
+  { label: 'ゴシック', css: 'sans-serif' },
+  { label: '明朝', css: 'serif' },
+  { label: '等幅', css: 'monospace' },
+  { label: 'Zen Maru Gothic', css: '"Zen Maru Gothic", sans-serif' },
+  { label: 'Reggae One', css: '"Reggae One", cursive' },
+  { label: 'Train One', css: '"Train One", sans-serif' },
+  { label: 'Rampart One', css: '"Rampart One", cursive' },
+  { label: 'Yuji Syuku', css: '"Yuji Syuku", serif' },
+  { label: 'Dela Gothic One', css: '"Dela Gothic One", sans-serif' },
+];
+
 // =====  Template Definitions  =====
 const TEMPLATE_DEFS = {
   calendar: {
@@ -105,6 +120,7 @@ const TEMPLATE_DEFS = {
     params: [
       { key: 'title',     label: 'タイトル', type: 'text', def: 'お知らせ' },
       { key: 'titleColor',label: 'タイトルの色', type: 'palette', def: 2 },
+      { key: 'font',      label: 'フォント', type: 'font', def: 0 },
       { key: 'lines',     label: '本文（各行は改行区切り、最大10行）', type: 'textarea', def: '会議は15時から\n302号室\n資料をお持ちください' },
       { key: 'bodyColor', label: '本文の色', type: 'palette', def: 1 },
       { key: 'align',     label: '配置', type: 'select', def: 'center', options: [['left','左'],['center','中央'],['right','右']] },
@@ -116,6 +132,7 @@ const TEMPLATE_DEFS = {
     params: [
       { key: 'name',      label: '名前', type: 'text', def: '山田 太郎' },
       { key: 'nameColor', label: '名前の色', type: 'palette', def: 1 },
+      { key: 'font',      label: 'フォント', type: 'font', def: 0 },
       { key: 'role',      label: '役職', type: 'text', def: 'マネージャー' },
       { key: 'roleColor', label: '役職の色', type: 'palette', def: 2 },
       { key: 'company',   label: '会社名', type: 'text', def: '株式会社サンプル' },
@@ -129,6 +146,7 @@ const TEMPLATE_DEFS = {
     params: [
       { key: 'event',     label: 'イベント名', type: 'text', def: 'プロジェクト定例会' },
       { key: 'eventColor',label: 'イベント名の色', type: 'palette', def: 2 },
+      { key: 'font',      label: 'フォント', type: 'font', def: 0 },
       { key: 'date',      label: '日付', type: 'text', def: '2026/7/20' },
       { key: 'time',      label: '時間', type: 'text', def: '15:00 〜 16:30' },
       { key: 'location',  label: '場所', type: 'text', def: '3F 大会議室' },
@@ -142,6 +160,7 @@ const TEMPLATE_DEFS = {
     params: [
       { key: 'main',      label: '大見出し', type: 'text', def: '会議中' },
       { key: 'mainColor', label: '大見出しの色', type: 'palette', def: 2 },
+      { key: 'font',      label: 'フォント', type: 'font', def: 0 },
       { key: 'sub',       label: '小見出し', type: 'text', def: '14:00〜15:30' },
       { key: 'subColor',  label: '小見出しの色', type: 'palette', def: 1 },
       { key: 'bgColor',   label: '背景色', type: 'palette', def: 0 },
@@ -190,7 +209,15 @@ function buildParamUI() {
         row.appendChild(sw);
       });
       g.appendChild(row);
-    } else if (p.type === 'select') {
+    } else if (p.type === 'font') {
+      const sel = document.createElement('select');
+      FONTS.forEach((f, i) => {
+        const opt = document.createElement('option');
+        opt.value = i; opt.textContent = f.label; if (i === val) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.onchange = () => { vals[p.key] = parseInt(sel.value); updatePreview(); };
+      g.appendChild(sel);
       const sel = document.createElement('select');
       p.options.forEach(([v, l]) => {
         const opt = document.createElement('option');
@@ -240,39 +267,40 @@ function drawBorder(idx, thick) {
   ctx.strokeRect(6,6,388,288);
 }
 
-function autoFitFont(ctx, text, maxW, maxH, startSize) {
+function autoFitFont(ctx, text, maxW, maxH, startSize, fontFamily) {
   let size = startSize || 40;
-  ctx.font = `bold ${size}px sans-serif`;
+  const ff = fontFamily || 'sans-serif';
+  ctx.font = `bold ${size}px ${ff}`;
   let m = ctx.measureText(text);
   while ((m.width > maxW || size > maxH) && size > 6) {
     size -= 1;
-    ctx.font = `bold ${size}px sans-serif`;
+    ctx.font = `bold ${size}px ${ff}`;
     m = ctx.measureText(text);
   }
   return size;
 }
 
-function drawTextCenter(text, x, y, maxW, size, colorIdx) {
+function drawTextCenter(text, x, y, maxW, size, colorIdx, fontFamily) {
   ctx.fillStyle = cssColor(colorIdx);
-  const s = autoFitFont(ctx, text, maxW, size, size);
+  const s = autoFitFont(ctx, text, maxW, size, size, fontFamily);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
   return s;
 }
 
-function drawTextLeft(text, x, y, maxW, size, colorIdx) {
+function drawTextLeft(text, x, y, maxW, size, colorIdx, fontFamily) {
   ctx.fillStyle = cssColor(colorIdx);
-  const s = autoFitFont(ctx, text, maxW, size, size);
+  const s = autoFitFont(ctx, text, maxW, size, size, fontFamily);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
   return s;
 }
 
-function drawTextRight(text, x, y, maxW, size, colorIdx) {
+function drawTextRight(text, x, y, maxW, size, colorIdx, fontFamily) {
   ctx.fillStyle = cssColor(colorIdx);
-  const s = autoFitFont(ctx, text, maxW, size, size);
+  const s = autoFitFont(ctx, text, maxW, size, size, fontFamily);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
@@ -349,16 +377,16 @@ function renderCalendar(v) {
 
 function renderMultitext(v) {
   fillBg(v.bgColor);
+  const ff = FONTS[v.font]?.css || 'sans-serif';
 
-  const titleSize = 24;
   if (v.title) {
     ctx.fillStyle = cssColor(v.titleColor);
-    ctx.font = `bold ${titleSize}px sans-serif`;
+    ctx.font = `bold 24px ${ff}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    let ts = titleSize;
+    let ts = 24;
     let m = ctx.measureText(v.title);
-    while (m.width > 360 && ts > 10) { ts--; ctx.font = `bold ${ts}px sans-serif`; m = ctx.measureText(v.title); }
+    while (m.width > 360 && ts > 10) { ts--; ctx.font = `bold ${ts}px ${ff}`; m = ctx.measureText(v.title); }
     ctx.fillText(v.title, 200, 28);
   }
 
@@ -375,33 +403,35 @@ function renderMultitext(v) {
   lines.forEach((line, i) => {
     const y = startY + i * (availH / lc) + (availH / lc) / 2;
     const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
-    fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor);
+    fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor, ff);
   });
 }
 
 function renderNameplate(v) {
   fillBg(v.bgColor);
   if (v.borderColor !== v.bgColor) drawBorder(v.borderColor, 4);
+  const ff = FONTS[v.font]?.css || 'sans-serif';
 
   const nameText = v.name || '名前';
-  const nameSize = drawTextCenter(nameText, 200, 110, 340, 52, v.nameColor);
+  const nameSize = drawTextCenter(nameText, 200, 110, 340, 52, v.nameColor, ff);
 
   let y = 175;
   if (v.role) {
-    drawTextCenter(v.role, 200, y, 340, 24, v.roleColor);
+    drawTextCenter(v.role, 200, y, 340, 24, v.roleColor, ff);
     y += 35;
   }
   if (v.company) {
-    drawTextCenter(v.company, 200, y, 340, 18, v.companyColor);
+    drawTextCenter(v.company, 200, y, 340, 18, v.companyColor, ff);
   }
 }
 
 function renderSchedule(v) {
   fillBg(v.bgColor);
   if (v.borderColor !== v.bgColor) drawBorder(v.borderColor, 3);
+  const ff = FONTS[v.font]?.css || 'sans-serif';
 
   const eventText = v.event || '(イベント名)';
-  drawTextCenter(eventText, 200, 48, 360, 32, v.eventColor);
+  drawTextCenter(eventText, 200, 48, 360, 32, v.eventColor, ff);
 
   const details = [];
   if (v.date) details.push('日付: ' + v.date);
@@ -412,7 +442,7 @@ function renderSchedule(v) {
     const startY = 120;
     const gap = details.length > 2 ? 30 : 38;
     details.forEach((d, i) => {
-      drawTextCenter(d, 200, startY + i * gap, 340, 18, v.detailColor);
+      drawTextCenter(d, 200, startY + i * gap, 340, 18, v.detailColor, ff);
     });
   }
 }
@@ -420,12 +450,13 @@ function renderSchedule(v) {
 function renderSimple(v) {
   fillBg(v.bgColor);
   if (v.borderColor !== v.bgColor) drawBorder(v.borderColor, 5);
+  const ff = FONTS[v.font]?.css || 'sans-serif';
 
   const mainText = v.main || '(テキスト)';
-  drawTextCenter(mainText, 200, v.sub ? 100 : 150, 360, 64, v.mainColor);
+  drawTextCenter(mainText, 200, v.sub ? 100 : 150, 360, 64, v.mainColor, ff);
 
   if (v.sub) {
-    drawTextCenter(v.sub, 200, 190, 340, 28, v.subColor);
+    drawTextCenter(v.sub, 200, 190, 340, 28, v.subColor, ff);
   }
 }
 
@@ -619,14 +650,19 @@ function switchTemplate(name) {
 }
 
 // =====  Init  =====
-document.addEventListener('DOMContentLoaded', () => {
+async function initApp() {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => switchTemplate(tab.dataset.template));
   });
   document.getElementById('btnDownload').addEventListener('click', downloadPNG);
   buildParamUI();
+  if (document.fonts) {
+    await document.fonts.ready;
+  }
   updatePreview();
-});
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
 </script>
 </body>
 </html>
