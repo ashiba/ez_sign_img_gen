@@ -421,10 +421,6 @@ function renderMultitext(v) {
     const y = blockTop + bodySize * lineH * (i + 0.5);
     const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
     fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor, ff);
-  lines.forEach((line, i) => {
-    const y = startY + i * (availH / lc) + (availH / lc) / 2;
-    const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
-    fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor, ff);
   });
 }
 
