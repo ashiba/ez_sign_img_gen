@@ -397,7 +397,15 @@ function renderMultitext(v) {
   const startY = v.title ? 55 : 30;
   const availH = 300 - startY - 10;
   const lc = lines.length;
-  let bodySize = Math.min(Math.floor(availH / lc) - 2, 26);
+  const maxHSize = Math.floor(availH / lc) - 2;
+  let sizes = lines.map(line => {
+    let s = 36;
+    ctx.font = `bold ${s}px ${ff}`;
+    let m = ctx.measureText(line);
+    while (m.width > 360 && s > 8) { s--; ctx.font = `bold ${s}px ${ff}`; m = ctx.measureText(line); }
+    return s;
+  });
+  let bodySize = Math.min(Math.min(...sizes), maxHSize, 36);
   if (bodySize < 8) bodySize = 8;
 
   ctx.textBaseline = 'middle';
