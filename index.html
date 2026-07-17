@@ -394,31 +394,27 @@ function renderMultitext(v) {
   const lines = (v.lines || '').split('\n').map(l => l.trim()).filter(l => l).slice(0, 10);
   if (!lines.length) return;
 
-  const lineH = 1.35;
-  const startY = v.title ? 44 : 12;
-  const topMargin = 4;
-  const availH = 300 - startY - topMargin;
+  const lineH = 1.25;
+  const startY = v.title ? 38 : 10;
+  const bottomPad = 6;
   const lc = lines.length;
 
-  let bodySize = 36;
-  for (let s = 36; s >= 8; s--) {
+  let bodySize = 42;
+  for (let s = 42; s >= 8; s--) {
     ctx.font = `bold ${s}px ${ff}`;
     let ok = true;
     for (const line of lines) {
       if (ctx.measureText(line).width > 360) { ok = false; break; }
     }
     if (!ok) continue;
-    if (s * lineH * lc > availH) continue;
+    if (startY + s * lineH * lc > 300 - bottomPad) continue;
     bodySize = s;
     break;
   }
 
-  const blockH = bodySize * lineH * lc;
-  const blockTop = startY + (availH - blockH) / 2;
-
   ctx.textBaseline = 'middle';
   lines.forEach((line, i) => {
-    const y = blockTop + bodySize * lineH * (i + 0.5);
+    const y = startY + bodySize * lineH * (i + 0.5);
     const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
     fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor, ff);
   });
