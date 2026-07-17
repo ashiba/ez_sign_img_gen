@@ -388,27 +388,39 @@ function renderMultitext(v) {
     let ts = 24;
     let m = ctx.measureText(v.title);
     while (m.width > 360 && ts > 10) { ts--; ctx.font = `bold ${ts}px ${ff}`; m = ctx.measureText(v.title); }
-    ctx.fillText(v.title, 200, 28);
+    ctx.fillText(v.title, 200, 22);
   }
 
   const lines = (v.lines || '').split('\n').map(l => l.trim()).filter(l => l).slice(0, 10);
   if (!lines.length) return;
 
-  const startY = v.title ? 55 : 30;
-  const availH = 300 - startY - 10;
+  const lineH = 1.35;
+  const startY = v.title ? 44 : 12;
+  const topMargin = 4;
+  const availH = 300 - startY - topMargin;
   const lc = lines.length;
-  const maxHSize = Math.floor(availH / lc) - 2;
-  let sizes = lines.map(line => {
-    let s = 36;
+
+  let bodySize = 36;
+  for (let s = 36; s >= 8; s--) {
     ctx.font = `bold ${s}px ${ff}`;
-    let m = ctx.measureText(line);
-    while (m.width > 360 && s > 8) { s--; ctx.font = `bold ${s}px ${ff}`; m = ctx.measureText(line); }
-    return s;
-  });
-  let bodySize = Math.min(Math.min(...sizes), maxHSize, 36);
-  if (bodySize < 8) bodySize = 8;
+    let ok = true;
+    for (const line of lines) {
+      if (ctx.measureText(line).width > 360) { ok = false; break; }
+    }
+    if (!ok) continue;
+    if (s * lineH * lc > availH) continue;
+    bodySize = s;
+    break;
+  }
+
+  const blockH = bodySize * lineH * lc;
+  const blockTop = startY + (availH - blockH) / 2;
 
   ctx.textBaseline = 'middle';
+  lines.forEach((line, i) => {
+    const y = blockTop + bodySize * lineH * (i + 0.5);
+    const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
+    fn(line, v.align === 'left' ? 20 : v.align === 'right' ? 380 : 200, y, 360, bodySize, v.bodyColor, ff);
   lines.forEach((line, i) => {
     const y = startY + i * (availH / lc) + (availH / lc) / 2;
     const fn = v.align === 'left' ? drawTextLeft : v.align === 'right' ? drawTextRight : drawTextCenter;
