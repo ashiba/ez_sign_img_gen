@@ -218,6 +218,7 @@ function buildParamUI() {
       });
       fontSel.onchange = () => { vals[p.key] = parseInt(fontSel.value); updatePreview(); };
       g.appendChild(fontSel);
+    } else if (p.type === 'select') {
       const sel = document.createElement('select');
       p.options.forEach(([v, l]) => {
         const opt = document.createElement('option');
